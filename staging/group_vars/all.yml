@@ -1,0 +1,5 @@
+ansible_become: yes
+hosts: localhost
+connection: local
+any_errors_fatal: true
+gather_facts: no

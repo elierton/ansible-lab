@@ -1,0 +1,4 @@
+---
+
+  - name: restart freeswitch
+    service: name=freeswitch state=restarted enabled=yes

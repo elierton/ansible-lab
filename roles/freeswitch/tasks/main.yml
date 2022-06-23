@@ -1,0 +1,83 @@
+---
+  #Installing FreeSWITCH - Package
+  
+  - name: Install Packages
+    apt: 
+      name: "{{ item }}" 
+      update_cache: true
+      state: present
+    with_items: 
+      - gnupg2 
+      - wget 
+      - lsb-release
+  
+  - name: Fetch password protected FreeSWITCH GPG key
+    get_url:
+      url: '{{ freeswitch_repo_gpg }}'
+      dest: /usr/share/keyrings/signalwire-freeswitch-repo.gpg
+      username: '{{ freeswitch_signalwire_user }}'
+      password: '{{ freeswitch_signalwire_token }}'
+  
+  - name: Add signalwire TOKEN and deb repository into sources list
+    shell: |
+      echo "machine freeswitch.signalwire.com login signalwire password {{ freeswitch_signalwire_token }}" > /etc/apt/auth.conf 
+      echo "deb {{ freeswitch_gpg_key }} {{ freeswitch_unstable_repo }} `lsb_release -sc` main" > /etc/apt/sources.list.d/freeswitch.list
+      echo "deb-src {{ freeswitch_gpg_key }} {{ freeswitch_unstable_repo }} `lsb_release -sc` main" >> /etc/apt/sources.list.d/freeswitch.list
+    when: (ansible_distribution == "Debian" and ansible_distribution_major_version == "9") or
+          (ansible_distribution == "Debian" and ansible_distribution_major_version == "10") or 
+          (ansible_distribution == "Debian" and ansible_distribution_major_version == "11")
+  
+  - name: Installing dependencies...
+    apt: 
+      name: "{{ item }}" 
+      update_cache: true
+      state: present
+    with_items:
+      - git 
+      - screen
+      - xz-utils
+      - devscripts
+      - cowbuilder
+  
+  - name: Packages from freeswitch repo are not trusted by pbuilder
+    shell: |
+      echo "ALLOWUNTRUSTED=yes" >> /etc/pbuilderrc 
+      mkdir /usr/src/freeswitch-debs
+      git clone https://github.com/signalwire/freeswitch.git /usr/src/freeswitch-debs/freeswitch
+      cd /usr/src/freeswitch-debs
+      screen -L
+      cd freeswitch
+      ./debian/util.sh build-all -aamd64 -cbuster
+
+
+
+   #Post-installations steps https://freeswitch.org/confluence/display/FREESWITCH/Debian+Post-Install+Tasks
+
+  - name: Set owner and permissions
+    shell: |
+      cd /usr/local
+      mkdir -p freeswitch/bin
+      groupadd freeswitch
+      adduser --quiet --system --home /usr/local/freeswitch --gecos "FreeSWITCH open source softswitch" --ingroup freeswitch freeswitch --disabled-password
+      chown -R freeswitch:freeswitch /usr/local/freeswitch/
+      chmod -R ug=rwX,o= /usr/local/freeswitch/
+
+  - name: Copy file with owner and permissions
+    copy:
+      src: ../files/freeswitch-systemd.freeswitch.service
+      dest: /etc/systemd/system/freeswitch.service
+      owner: root
+      group: root
+      mode: '0777'
+        
+  - name: Creating systemd unit file FreeSWITCH
+    shell: |
+      systemctl daemon-reload
+
+  - name: Starting FreeSWITCH for the first time
+    service:
+      name: freeswitch
+      state: started
+
+  
+  
